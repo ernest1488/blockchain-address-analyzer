@@ -1,49 +1,68 @@
 'use client'
 import { useState } from 'react'
-import AddressInput from '@/components/AddressInput'
+import AddressInput, { type AddrKind } from '@/components/AddressInput'
 import PortfolioSection from '@/components/PortfolioSection'
 import TransactionsSection from '@/components/TransactionsSection'
 import SecuritySection from '@/components/SecuritySection'
+import SolanaPortfolioSection from '@/components/SolanaPortfolioSection'
+import SolanaTransactionsSection from '@/components/SolanaTransactionsSection'
 
 type Tab = 'portfolio' | 'transactions' | 'security'
 
-const TABS: { id: Tab; label: string; icon: string }[] = [
+interface TabDef { id: Tab; label: string; icon: string }
+
+const EVM_TABS: TabDef[] = [
   { id: 'portfolio',    label: 'Portfolio',    icon: '◈' },
   { id: 'transactions', label: 'Transactions', icon: '⟳' },
   { id: 'security',     label: 'Security',     icon: '⬡' },
 ]
 
-const NETWORKS = ['Ethereum', 'Polygon', 'Arbitrum', 'Optimism', 'Base']
+const SVM_TABS: TabDef[] = [
+  { id: 'portfolio',    label: 'Portfolio',    icon: '◈' },
+  { id: 'transactions', label: 'Transactions', icon: '⟳' },
+]
+
+const NETWORK_BADGES = ['ETH', 'POL', 'ARB', 'OPT', 'BAS', 'SOL']
 
 export default function Home() {
   const [address, setAddress]             = useState<string | null>(null)
+  const [addressKind, setAddressKind]     = useState<AddrKind | null>(null)
   const [activeTab, setActiveTab]         = useState<Tab>('portfolio')
-  const [portfolioData, setPortfolioData] = useState<any>(null)
-  const [securityData, setSecurityData]   = useState<any>(null)
+  const [portfolioData, setPortfolioData] = useState<unknown>(null)
+  const [solPortfolioData, setSolPortfolioData] = useState<unknown>(null)
+  const [securityData, setSecurityData]   = useState<{ riskLevel?: string } | null>(null)
   const [loading, setLoading]             = useState(false)
 
-  const handleAnalyze = async (addr: string) => {
+  const handleAnalyze = async (addr: string, kind: AddrKind) => {
     setLoading(true)
     setAddress(addr)
+    setAddressKind(kind)
     setActiveTab('portfolio')
     setPortfolioData(null)
+    setSolPortfolioData(null)
     setSecurityData(null)
 
     try {
-      const [portfolio, security] = await Promise.all([
-        fetch(`/api/portfolio?address=${addr}`).then((r) => r.json()),
-        fetch(`/api/security?address=${addr}`).then((r) => r.json()),
-      ])
-      setPortfolioData(portfolio)
-      setSecurityData(security)
+      if (kind === 'evm') {
+        const [portfolio, security] = await Promise.all([
+          fetch(`/api/portfolio?address=${addr}`).then((r) => r.json()),
+          fetch(`/api/security?address=${addr}`).then((r) => r.json()),
+        ])
+        setPortfolioData(portfolio)
+        setSecurityData(security)
+      } else {
+        const portfolio = await fetch(`/api/sol/portfolio?address=${addr}`).then((r) => r.json())
+        setSolPortfolioData(portfolio)
+      }
     } catch {
-      // errors shown per-section
+      // shown per-section
     } finally {
       setLoading(false)
     }
   }
 
-  const isHighRisk = securityData?.riskLevel === 'high'
+  const isHighRisk = addressKind === 'evm' && securityData?.riskLevel === 'high'
+  const tabs = addressKind === 'svm' ? SVM_TABS : EVM_TABS
 
   return (
     <div style={{ position: 'relative', zIndex: 1, minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -81,14 +100,14 @@ export default function Home() {
           </div>
 
           <div style={{ display: 'flex', gap: 4 }}>
-            {NETWORKS.map((n) => (
+            {NETWORK_BADGES.map((n) => (
               <span key={n} style={{
                 fontSize: 9, fontFamily: 'JetBrains Mono, monospace', fontWeight: 500,
                 color: 'var(--text-muted)', padding: '2px 7px',
                 border: '1px solid var(--border)', borderRadius: 2,
                 letterSpacing: '0.06em',
               }}>
-                {n.slice(0, 3).toUpperCase()}
+                {n}
               </span>
             ))}
           </div>
@@ -121,7 +140,7 @@ export default function Home() {
               boxShadow: '0 0 8px var(--success)',
               display: 'inline-block',
             }} />
-            EVM MULTI-CHAIN SCANNER
+            EVM + SOLANA SCANNER
           </div>
 
           <h1 className="animate-fade-up-1" style={{
@@ -141,7 +160,7 @@ export default function Home() {
             fontFamily: 'JetBrains Mono, monospace',
             marginBottom: 44, letterSpacing: '0.03em',
           }}>
-            portfolio · transactions · security — across all major EVM networks
+            portfolio · transactions · security — across EVM chains and Solana
           </p>
 
           <div className="animate-fade-up-3">
@@ -170,6 +189,15 @@ export default function Home() {
               padding: '5px 14px', borderRadius: 3,
               wordBreak: 'break-all',
             }}>{address}</code>
+            <span style={{
+              fontSize: 9, letterSpacing: '0.12em',
+              fontFamily: 'JetBrains Mono, monospace', fontWeight: 600,
+              color: 'var(--text-muted)',
+              border: '1px solid var(--border2)',
+              padding: '3px 8px', borderRadius: 2,
+            }}>
+              {addressKind === 'svm' ? 'SOLANA' : 'EVM'}
+            </span>
             {isHighRisk && (
               <span style={{
                 fontSize: 10, letterSpacing: '0.1em',
@@ -186,7 +214,7 @@ export default function Home() {
           <div className="animate-fade-up-1" style={{
             display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 0,
           }}>
-            {TABS.map((tab) => {
+            {tabs.map((tab) => {
               const active = activeTab === tab.id
               return (
                 <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
@@ -248,27 +276,44 @@ export default function Home() {
                   fontFamily: 'JetBrains Mono, monospace', fontSize: 11,
                   color: 'var(--text-muted)', letterSpacing: '0.12em',
                 }}>
-                  FETCHING DATA ACROSS ALL NETWORKS
+                  {addressKind === 'svm' ? 'FETCHING SOLANA DATA' : 'FETCHING DATA ACROSS ALL NETWORKS'}
                   <span className="cursor-blink">_</span>
                 </p>
               </div>
-            ) : (
+            ) : addressKind === 'evm' ? (
               <>
-                {activeTab === 'portfolio' && portfolioData && <PortfolioSection data={portfolioData} />}
-                {activeTab === 'portfolio' && !portfolioData && !loading && (
+                {activeTab === 'portfolio' && portfolioData && (
+                  <PortfolioSection data={portfolioData as Parameters<typeof PortfolioSection>[0]['data']} />
+                )}
+                {activeTab === 'portfolio' && !portfolioData && (
                   <div style={{ textAlign: 'center', padding: '80px 0',
                     color: 'var(--danger)', fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.1em' }}>
                     FAILED TO LOAD PORTFOLIO DATA
                   </div>
                 )}
                 {activeTab === 'transactions' && <TransactionsSection address={address} />}
-                {activeTab === 'security' && securityData && <SecuritySection data={securityData} />}
-                {activeTab === 'security' && !securityData && !loading && (
+                {activeTab === 'security' && securityData && (
+                  <SecuritySection data={securityData as Parameters<typeof SecuritySection>[0]['data']} />
+                )}
+                {activeTab === 'security' && !securityData && (
                   <div style={{ textAlign: 'center', padding: '80px 0',
                     color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.1em' }}>
                     FAILED TO LOAD SECURITY DATA
                   </div>
                 )}
+              </>
+            ) : (
+              <>
+                {activeTab === 'portfolio' && solPortfolioData && (
+                  <SolanaPortfolioSection data={solPortfolioData as Parameters<typeof SolanaPortfolioSection>[0]['data']} />
+                )}
+                {activeTab === 'portfolio' && !solPortfolioData && (
+                  <div style={{ textAlign: 'center', padding: '80px 0',
+                    color: 'var(--danger)', fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '0.1em' }}>
+                    FAILED TO LOAD PORTFOLIO DATA
+                  </div>
+                )}
+                {activeTab === 'transactions' && <SolanaTransactionsSection address={address} />}
               </>
             )}
           </div>
@@ -284,7 +329,7 @@ export default function Home() {
         <span style={{
           fontFamily: 'JetBrains Mono, monospace', fontSize: 10,
           color: 'var(--text-dim)', letterSpacing: '0.1em',
-        }}>CHAINLENS · EVM ANALYTICS · {new Date().getFullYear()}</span>
+        }}>CHAINLENS · MULTI-CHAIN ANALYTICS · {new Date().getFullYear()}</span>
       </footer>
     </div>
   )

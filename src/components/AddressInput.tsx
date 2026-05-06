@@ -1,22 +1,36 @@
 'use client'
 import { useState } from 'react'
 
+export type AddrKind = 'evm' | 'svm'
+
 interface Props {
-  onAnalyze: (address: string) => void
+  onAnalyze: (address: string, kind: AddrKind) => void
   isLoading: boolean
+}
+
+const EVM_RE = /^0x[0-9a-fA-F]{40}$/
+const SVM_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
+
+function detectKind(s: string): AddrKind | null {
+  if (EVM_RE.test(s)) return 'evm'
+  if (SVM_RE.test(s)) return 'svm'
+  return null
 }
 
 export default function AddressInput({ onAnalyze, isLoading }: Props) {
   const [value, setValue] = useState('')
   const [focused, setFocused] = useState(false)
-  const isValid = /^0x[0-9a-fA-F]{40}$/.test(value.trim())
+  const trimmed = value.trim()
+  const kind = detectKind(trimmed)
+  const isValid = kind !== null
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (isValid && !isLoading) onAnalyze(value.trim())
+    if (kind && !isLoading) onAnalyze(trimmed, kind)
   }
 
   const active = isValid && !isLoading
+  const prefixLabel = kind === 'evm' ? 'EVM' : kind === 'svm' ? 'SOL' : 'ADDR'
 
   return (
     <div style={{ width: '100%', maxWidth: 640, margin: '0 auto' }}>
@@ -31,12 +45,12 @@ export default function AddressInput({ onAnalyze, isLoading }: Props) {
           borderRight: 'none',
           borderRadius: '4px 0 0 4px',
           fontFamily: 'JetBrains Mono, monospace',
-          fontSize: 10, color: 'var(--text-muted)',
+          fontSize: 10, color: kind ? 'var(--amber)' : 'var(--text-muted)',
           letterSpacing: '0.1em', whiteSpace: 'nowrap',
-          userSelect: 'none',
-          transition: 'border-color 0.2s',
+          userSelect: 'none', minWidth: 56, justifyContent: 'center',
+          transition: 'all 0.2s',
         }}>
-          ADDR
+          {prefixLabel}
         </div>
 
         <input
@@ -45,7 +59,7 @@ export default function AddressInput({ onAnalyze, isLoading }: Props) {
           onChange={(e) => setValue(e.target.value)}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          placeholder="0x... wallet address"
+          placeholder="0x... or Solana address"
           spellCheck={false}
           style={{
             flex: 1,
@@ -92,7 +106,7 @@ export default function AddressInput({ onAnalyze, isLoading }: Props) {
           fontFamily: 'JetBrains Mono, monospace',
           letterSpacing: '0.06em',
         }}>
-          ✗ INVALID ADDRESS — expected 0x + 40 hex characters
+          ✗ INVALID — expected EVM (0x + 40 hex) or Solana (base58, 32–44 chars)
         </p>
       )}
     </div>
